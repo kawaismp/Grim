@@ -417,7 +417,7 @@ public class PredictionEngine {
                     data.vector.setZ(data.vector.getZ() * 0.6);
                     data.addVectorType(VectorData.VectorType.AttackSlow);
                 } else {
-                    velocities.add(data.returnNewModified(data.vector.clone().multiply(new Vector3dm(0.6, 1, 0.6)), VectorData.VectorType.AttackSlow));
+                    velocities.add(data.returnNewModified(data.vector.clone().multiply(0.6, 1, 0.6), VectorData.VectorType.AttackSlow));
                 }
             }
 
@@ -442,16 +442,16 @@ public class PredictionEngine {
         Set<VectorData> vectors = stupidVectors && stuckOnEdge ? new HashSet<>(velocities) : velocities;
         for (VectorData vector : vectors) {
             if (stupidVectors) {
-                if (stuckOnEdge) {
-                    VectorData edgeVector = vector.returnNewModified(vector.vector.clone(), vector.vectorType);
-                    if (Math.abs(edgeVector.vector.getY()) < minimumMovement) {
-                        edgeVector.vector.setY(0D);
+                if (Collisions.getHorizontalDistanceSqr(vector.vector) < 9.0E-6) {
+                    if (stuckOnEdge) {
+                        VectorData edgeVector = vector.returnNewModified(vector.vector.clone(), vector.vectorType);
+                        if (Math.abs(edgeVector.vector.getY()) < minimumMovement) {
+                            edgeVector.vector.setY(0D);
+                        }
+
+                        velocities.add(edgeVector);
                     }
 
-                    velocities.add(edgeVector);
-                }
-
-                if (Collisions.getHorizontalDistanceSqr(vector.vector) < 9.0E-6) {
                     vector.vector.setX(0D);
                     vector.vector.setZ(0D);
                 }

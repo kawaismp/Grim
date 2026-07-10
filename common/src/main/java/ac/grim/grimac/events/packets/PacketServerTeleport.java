@@ -2,7 +2,7 @@ package ac.grim.grimac.events.packets;
 
 import ac.grim.grimac.GrimAPI;
 import ac.grim.grimac.player.GrimPlayer;
-import ac.grim.grimac.utils.data.Pair;
+import ac.grim.grimac.utils.data.IntToObjectPair;
 import ac.grim.grimac.utils.data.RotationData;
 import ac.grim.grimac.utils.math.GrimMath;
 import ac.grim.grimac.utils.math.Location;
@@ -113,6 +113,11 @@ public class PacketServerTeleport extends PacketListenerAbstract {
                 }
             }
 
+            // 1.21.2+ client ignore teleports if player is inside vehicle, ABSOLUTE CINEMA MOJANG
+            if (player.getClientVersion().isNewerThanOrEquals(ClientVersion.V_1_21_2) && player.compensatedEntities.serverPlayerVehicle != null) {
+                pos = player.getSetbackTeleportUtil().lastKnownGoodPosition.getPos();
+            }
+
             player.sendTransaction();
             final int lastTransactionSent = player.lastTransactionSent.get();
             event.getTasksAfterSend().add(player::sendTransaction);
@@ -122,11 +127,11 @@ public class PacketServerTeleport extends PacketListenerAbstract {
                 event.getTasksAfterSend().add(() -> player.compensatedEntities.self.eject());
             }
 
-            // For some reason teleports on 1.7 servers are offset by 1.62?
-            if (PacketEvents.getAPI().getServerManager().getVersion().isOlderThan(ServerVersion.V_1_8))
+            // For some reason, teleports on 1.7 are offset by 1.62?
+            if (event.getServerVersion().isOlderThan(ServerVersion.V_1_8))
                 pos = pos.withY(pos.getY() - 1.62);
 
-            Location target = new Location(null, pos.getX(), pos.getY(), pos.getZ());
+            Location target = new Location(null, pos.getX(), pos.getY(), pos.getZ(), teleport.getYaw(), teleport.getPitch());
             player.getSetbackTeleportUtil().addSentTeleport(target, teleport.getDeltaMovement(), lastTransactionSent, teleport.getRelativeFlags(), true, teleport.getTeleportId());
         }
 
@@ -147,7 +152,13 @@ public class PacketServerTeleport extends PacketListenerAbstract {
             }
 
             player.sendTransaction();
-            player.pendingRotations.add(new RotationData(packet.getYaw(), GrimMath.clamp(packet.getPitch() % 360F, -90F, 90F), player.getLastTransactionSent()));
+            player.pendingRotations.add(new RotationData(
+                    packet.getYaw(),
+                    packet.isRelativePitch() ? packet.getPitch() : GrimMath.clamp(packet.getPitch() % 360F, -90F, 90F),
+                    packet.isRelativeYaw(),
+                    packet.isRelativePitch(),
+                    player.getLastTransactionSent()
+            ));
             event.getTasksAfterSend().add(player::sendTransaction);
         }
 
@@ -157,7 +168,7 @@ public class PacketServerTeleport extends PacketListenerAbstract {
 
             player.sendTransaction();
             event.getTasksAfterSend().add(player::sendTransaction);
-            player.vehicleData.vehicleTeleports.add(new Pair<>(
+            player.vehicleData.vehicleTeleports.add(new IntToObjectPair<>(
                     player.lastTransactionSent.get(),
                     new WrapperPlayServerVehicleMove(event).getPosition()
             ));

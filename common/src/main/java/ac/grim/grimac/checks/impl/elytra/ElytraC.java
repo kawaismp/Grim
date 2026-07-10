@@ -8,10 +8,9 @@ import ac.grim.grimac.utils.anticheat.update.PredictionComplete;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.protocol.player.ClientVersion;
-import com.github.retrooper.packetevents.protocol.player.GameMode;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientEntityAction;
 
-@CheckData(name = "ElytraC", description = "Started gliding too frequently")
+@CheckData(name = "ElytraC", stableKey = "grim.elytra.too_frequent", description = "Started gliding too frequently")
 public class ElytraC extends Check implements PostPredictionCheck {
     private boolean glideThisTick, glideLastTick, setback;
     private int flags;
@@ -27,7 +26,7 @@ public class ElytraC extends Check implements PostPredictionCheck {
             return;
         }
 
-        if (player.gamemode == GameMode.SPECTATOR) {
+        if (!player.cameraEntity.isSelf()) {
             glideThisTick = glideLastTick = false;
         }
 
@@ -36,7 +35,7 @@ public class ElytraC extends Check implements PostPredictionCheck {
                 if (player.canSkipTicks()) {
                     flags++;
                 } else {
-                    if (flagAndAlert()) {
+                    if (flag()) {
                         setback = true;
                         if (shouldModifyPackets()) {
                             event.setCancelled(true);
@@ -61,7 +60,7 @@ public class ElytraC extends Check implements PostPredictionCheck {
         if (player.canSkipTicks()) {
             if (player.isTickingReliablyFor(3)) {
                 for (; flags > 0; flags--) {
-                    flagAndAlert();
+                    flag();
                 }
             }
 

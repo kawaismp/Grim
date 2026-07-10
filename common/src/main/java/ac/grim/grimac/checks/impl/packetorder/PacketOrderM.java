@@ -7,12 +7,11 @@ import ac.grim.grimac.player.GrimPlayer;
 import ac.grim.grimac.utils.anticheat.update.PredictionComplete;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.protocol.player.GameMode;
 import com.github.retrooper.packetevents.protocol.world.BlockFace;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerBlockPlacement;
 
-@CheckData(name = "PacketOrderM", experimental = true)
+@CheckData(name = "PacketOrderM", stableKey = "grim.packetorder.interact_use_order", description = "Sent use item and entity interaction packets in an invalid order", experimental = true)
 public class PacketOrderM extends Check implements PostPredictionCheck {
     public PacketOrderM(final GrimPlayer player) {
         super(player);
@@ -28,7 +27,7 @@ public class PacketOrderM extends Check implements PostPredictionCheck {
                 interacting = true;
                 if (usingWithoutInteract) {
                     if (!player.canSkipTicks()) {
-                        if (flagAndAlert() && shouldModifyPackets()) {
+                        if (flag() && shouldModifyPackets()) {
                             event.setCancelled(true);
                             player.onPacketCancel();
                         }
@@ -49,7 +48,7 @@ public class PacketOrderM extends Check implements PostPredictionCheck {
             interacting = false;
         }
 
-        if (player.gamemode == GameMode.SPECTATOR || isTickPacket(event.getPacketType())) {
+        if (!player.cameraEntity.isSelf() || isTickPacket(event.getPacketType())) {
             usingWithoutInteract = interacting = false;
         }
     }
@@ -60,7 +59,7 @@ public class PacketOrderM extends Check implements PostPredictionCheck {
 
         if (player.isTickingReliablyFor(3)) {
             for (; invalid >= 1; invalid--) {
-                flagAndAlert();
+                flag();
             }
         }
 

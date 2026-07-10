@@ -32,6 +32,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerOp
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetPlayerInventory;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerWindowItems;
+import lombok.Getter;
 
 import java.util.List;
 import java.util.Map;
@@ -55,6 +56,12 @@ public class CompensatedInventory extends Check implements PacketCheck {
     // Player inventory is -1
     // Unsupported inventory is -2
     private int packetSendingInventorySize = PLAYER_INVENTORY_CASE;
+
+    // The item held at the start of the current client tick (processed at the end of the previous tick)
+    // also updated before slot changes to account for the delay when using hotbar keybinds
+    // Currently only used by 1.21.11+ players to handle attribute swapping items with the ATTACK_RANGE Component
+    @Getter
+    private ItemStack startOfTickStack = ItemStack.EMPTY;
 
     public CompensatedInventory(GrimPlayer playerData) {
         super(playerData);
@@ -223,7 +230,7 @@ public class CompensatedInventory extends Check implements PacketCheck {
                     return;
 
                 // 1.19.4+ clients support swapping with non-empty items
-                int swapItemSlot = item.getHand() == InteractionHand.MAIN_HAND ? inventory.selected + Inventory.HOTBAR_OFFSET : Inventory.SLOT_OFFHAND;
+                int swapItemSlot = item.getHand() == InteractionHand.MAIN_HAND ? inventory.getSelected() + Inventory.HOTBAR_OFFSET : Inventory.SLOT_OFFHAND;
 
                 // Mojang implemented this stupidly, I rewrote their item swap code to make it somewhat cleaner.
                 // Slot in hotbar
@@ -234,9 +241,7 @@ public class CompensatedInventory extends Check implements PacketCheck {
                 inventory.getInventoryStorage().handleClientClaimedSlotSet(slot);
                 inventory.getInventoryStorage().setItem(slot, use);
             }
-        }
-
-        if (event.getPacketType() == PacketType.Play.Client.PLAYER_DIGGING) {
+        } else if (event.getPacketType() == PacketType.Play.Client.PLAYER_DIGGING) {
             WrapperPlayClientPlayerDigging dig = new WrapperPlayClientPlayerDigging(event);
 
             // 1.8 clients don't predict dropping items
@@ -258,18 +263,16 @@ public class CompensatedInventory extends Check implements PacketCheck {
                 inventory.setHeldItem(null);
                 inventory.getInventoryStorage().handleClientClaimedSlotSet(Inventory.HOTBAR_OFFSET + player.packetStateData.lastSlotSelected);
             }
-        }
-
-        if (event.getPacketType() == PacketType.Play.Client.HELD_ITEM_CHANGE) {
+        } else if (event.getPacketType() == PacketType.Play.Client.HELD_ITEM_CHANGE) {
             final int slot = new WrapperPlayClientHeldItemChange(event).getSlot();
 
             // Stop people from spamming the server with an out-of-bounds exception
             if (slot > 8 || slot < 0) return;
 
-            inventory.selected = slot;
-        }
-
-        if (event.getPacketType() == PacketType.Play.Client.CREATIVE_INVENTORY_ACTION) {
+            // set this before we change the selected slot so we get the previous item held
+            this.startOfTickStack = getHeldItem();
+            inventory.setSelected(slot);
+        } else if (event.getPacketType() == PacketType.Play.Client.CREATIVE_INVENTORY_ACTION) {
             WrapperPlayClientCreativeInventoryAction action = new WrapperPlayClientCreativeInventoryAction(event);
             if (player.gamemode != GameMode.CREATIVE) return;
 
@@ -281,9 +284,7 @@ public class CompensatedInventory extends Check implements PacketCheck {
                 inventory.getSlot(action.getSlot()).set(action.getItemStack());
                 inventory.getInventoryStorage().handleClientClaimedSlotSet(action.getSlot());
             }
-        }
-
-        if (event.getPacketType() == PacketType.Play.Client.CLICK_WINDOW && !event.isCancelled()) {
+        } else if (event.getPacketType() == PacketType.Play.Client.CLICK_WINDOW && !event.isCancelled()) {
             WrapperPlayClientClickWindow click = new WrapperPlayClientClickWindow(event);
 
             // How is this possible? Maybe transaction splitting.
@@ -312,10 +313,10 @@ public class CompensatedInventory extends Check implements PacketCheck {
             if (slot == -1 || slot == -999 || slot < menu.getSlots().size()) {
                 menu.doClick(button, slot, clickType);
             }
-        }
-
-        if (event.getPacketType() == PacketType.Play.Client.CLOSE_WINDOW) {
+        } else if (event.getPacketType() == PacketType.Play.Client.CLOSE_WINDOW) {
             this.closeActiveInventory();
+        } else if (isTickPacket(event.getPacketType())) {
+            this.startOfTickStack = getHeldItem();
         }
     }
 
@@ -403,7 +404,8 @@ public class CompensatedInventory extends Check implements PacketCheck {
                 // 01/07/2025: Somehow, the server sends a window id 0 update when the player is not in their inventory?
                 // I guess just revert isPacketInventoryActive if the player has a NotImplementedMenu open?
                 // Regardless, the client does accept this packet and update its inventory, so we must do the same.
-                if (slots.size() == cachedPacketInvSize || items.getWindowId() == 0) {
+                boolean forceUpdate = slots.size() == cachedPacketInvSize || items.getWindowId() == 0;
+                if (!isPacketInventoryActive && forceUpdate) {
                     isPacketInventoryActive = true;
                     updatedValue.set(true);
                 }

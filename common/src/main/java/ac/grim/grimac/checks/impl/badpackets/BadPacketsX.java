@@ -7,10 +7,9 @@ import ac.grim.grimac.player.GrimPlayer;
 import ac.grim.grimac.utils.anticheat.update.PredictionComplete;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.protocol.player.GameMode;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientEntityAction;
 
-@CheckData(name = "BadPacketsX", experimental = true)
+@CheckData(name = "BadPacketsX", stableKey = "grim.badpackets.extra_input_actions", description = "Sent duplicate sneak or sprint input actions before the next movement packet", experimental = true)
 public class BadPacketsX extends Check implements PostPredictionCheck {
     private boolean sprint;
     private boolean sneak;
@@ -33,7 +32,7 @@ public class BadPacketsX extends Check implements PostPredictionCheck {
 
         if (player.isTickingReliablyFor(3)) {
             for (; flags > 0; flags--) {
-                flagAndAlertWithSetback();
+                flagWithSetback();
             }
         }
 
@@ -42,7 +41,7 @@ public class BadPacketsX extends Check implements PostPredictionCheck {
 
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
-        if (player.gamemode == GameMode.SPECTATOR || isTickPacket(event.getPacketType())) {
+        if (!player.cameraEntity.isSelf() || isTickPacket(event.getPacketType())) {
             sprint = sneak = false;
             return;
         }
@@ -51,7 +50,7 @@ public class BadPacketsX extends Check implements PostPredictionCheck {
             switch (new WrapperPlayClientEntityAction(event).getAction()) {
                 case START_SNEAKING, STOP_SNEAKING -> {
                     if (sneak) {
-                        if (player.canSkipTicks() || flagAndAlert()) {
+                        if (player.canSkipTicks() || flag()) {
                             flags++;
                         }
                     }
@@ -64,7 +63,7 @@ public class BadPacketsX extends Check implements PostPredictionCheck {
                     }
 
                     if (sprint) {
-                        if (player.canSkipTicks() || flagAndAlert()) {
+                        if (player.canSkipTicks() || flag()) {
                             flags++;
                         }
                     }
